@@ -739,14 +739,15 @@ export const linkerFlags: Flag[] = [
     desc: "Wrap glibc 2.18+ symbols (portable down to glibc 2.17)",
   },
   {
+    // Alpine's `build-base` ships libstdc++.a / libgcc.a / libgcc_eh.a via the
+    // g++ / gcc packages — same as glibc distros — so static linking works on
+    // both ABIs. Previously the musl branch linked these dynamically, which
+    // forced users on clean Alpine images to `apk add libstdc++ libgcc` before
+    // bun would launch (#29681). Bun still links musl libc dynamically (via
+    // /lib/ld-musl-*.so.1), so dynamic TLS keeps working for mimalloc etc.
     flag: ["-static-libstdc++", "-static-libgcc"],
-    when: c => c.linux && c.abi !== "musl",
-    desc: "Static C++ runtime (don't depend on host libstdc++)",
-  },
-  {
-    flag: ["-lstdc++", "-lgcc"],
-    when: c => c.linux && c.abi === "musl",
-    desc: "Dynamic C++ runtime on musl (static unavailable)",
+    when: c => c.linux,
+    desc: "Static C++ runtime (don't depend on host libstdc++/libgcc_s)",
   },
   {
     // Paired with compile-side -fno-unwind-tables above.
