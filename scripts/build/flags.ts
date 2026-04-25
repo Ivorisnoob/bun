@@ -73,6 +73,11 @@ export const globalFlags: Flag[] = [
   // ─── CPU target ───
   ...cpuTargetFlags,
   {
+    flag: c => `-arch ${c.arm64 ? "arm64" : "x86_64"}`,
+    when: c => c.darwin,
+    desc: "Target architecture (macOS)",
+  },
+  {
     // CMake auto-added these via CMAKE_OSX_DEPLOYMENT_TARGET/CMAKE_OSX_SYSROOT;
     // we must add explicitly. Without this, clang/ld64 default to the host SDK
     // version — CI builds get minos=15.0, breaking macOS 13/14 users at launch.
