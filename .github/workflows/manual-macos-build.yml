@@ -1,0 +1,46 @@
+name: Manual macOS Baseline Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    name: Build darwin-x64-baseline
+    runs-on: macos-14 # Apple Silicon runner (faster), will cross-compile to x86_64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false # We'll handle submodules manually if needed to save time
+
+      - name: Install Dependencies
+        run: |
+          brew install automake ccache cmake coreutils gnu-sed go icu4c libiconv libtool ninja pkg-config rust ruby llvm@21
+          echo "/opt/homebrew/opt/llvm@21/bin" >> $GITHUB_PATH
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          bun-version: latest
+
+      - name: Build Bun
+        run: |
+          # Use the build script with our new baseline support
+          bun run build --os=darwin --arch=x64 --baseline=on --profile=${{ github.event.inputs.profile }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-darwin-x64-baseline-${{ github.event.inputs.profile }}
+          path: build/${{ github.event.inputs.profile }}/bun*
