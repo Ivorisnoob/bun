@@ -122,6 +122,7 @@ function getAzureVmSize(os, arch, tier = "build") {
 const buildPlatforms = [
   { os: "darwin", arch: "aarch64", release: "14" },
   { os: "darwin", arch: "x64", release: "14" },
+  { os: "darwin", arch: "x64", baseline: true, release: "14" },
   { os: "linux", arch: "aarch64", distro: "amazonlinux", release: "2023", features: ["docker"] },
   { os: "linux", arch: "x64", distro: "amazonlinux", release: "2023", features: ["docker"] },
   { os: "linux", arch: "x64", baseline: true, distro: "amazonlinux", release: "2023", features: ["docker"] },
@@ -615,6 +616,9 @@ function needsBaselineVerification(platform) {
   const { os, arch, baseline } = platform;
   if (os === "linux") return (arch === "x64" && baseline) || arch === "aarch64";
   if (os === "windows") return arch === "x64" && baseline;
+  // darwin: macOS agents lack QEMU/SDE for emulator-based verification.
+  // The static instruction scanner would work but needs cargo on the agent.
+  // TODO: enable once macOS agent tooling supports it.
   return false;
 }
 
