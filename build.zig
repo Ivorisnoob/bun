@@ -141,9 +141,10 @@ pub fn getCpuModel(os: OperatingSystem, arch: Arch) ?Target.Query.CpuModel {
         return .{ .explicit = &Target.aarch64.cpu.apple_m1 };
     }
 
-    // note: x86_64 is dealt with in the CMake config and passed in.
-    // the reason for the explicit handling on aarch64 is due to troubles
-    // passing the exact target in via flags.
+    // x86_64 CPU model (baseline=nehalem vs non-baseline=haswell) is passed
+    // via -Dcpu= from scripts/build/zig.ts:zigCpu(). Returning null here
+    // means "use whatever the CLI specified" — do NOT override it, or the
+    // non-baseline build would lose AVX2.
     return null;
 }
 
