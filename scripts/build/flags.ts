@@ -80,6 +80,14 @@ export const globalFlags: Flag[] = [
     when: c => c.darwin && c.osxDeploymentTarget !== undefined && c.osxSysroot !== undefined,
     desc: "macOS deployment target + SDK (sets LC_BUILD_VERSION minos)",
   },
+  {
+    // When cross-compiling darwin x86_64 on an arm64 host, clang defaults to
+    // arm64 (native). -arch overrides this. Not needed for native arm64 builds
+    // or for Linux/Windows where --target= handles cross-compilation.
+    flag: "-arch x86_64",
+    when: c => c.darwin && c.x64 && c.host.arch === "aarch64",
+    desc: "macOS cross-compile: force x86_64 output on arm64 host",
+  },
 
   // ─── MSVC runtime (Windows) ───
   {

@@ -35,7 +35,7 @@ jobs:
       - name: Build Bun
         run: |
           # Use the build script with our new baseline support
-          bun run build --os=darwin --arch=x64 --baseline=on --profile=${{ github.event.inputs.profile }}
+          bun run build --os=darwin --arch=x64 --baseline=true --profile=${{ github.event.inputs.profile }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
