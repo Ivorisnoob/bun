@@ -33,7 +33,13 @@ jobs:
           bun-version: latest
 
       - name: Install Rust x86_64 target
-        run: rustup target add x86_64-apple-darwin
+        run: |
+          rustup target add x86_64-apple-darwin
+          # lolhtml uses a pinned nightly toolchain via rust-toolchain.toml;
+          # add the target to every installed toolchain so cargo can find it.
+          for toolchain in $(rustup toolchain list | awk '{print $1}'); do
+            rustup target add x86_64-apple-darwin --toolchain "$toolchain" || true
+          done
 
       - name: Build Bun
         run: |
