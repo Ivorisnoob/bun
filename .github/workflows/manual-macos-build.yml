@@ -32,9 +32,11 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install Rust x86_64 target
+        run: rustup target add x86_64-apple-darwin
+
       - name: Build Bun
         run: |
-          # Use the build script with our new baseline support
           bun run build --os=darwin --arch=x64 --baseline=true --profile=${{ github.event.inputs.profile }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
