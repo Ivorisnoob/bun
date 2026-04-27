@@ -715,6 +715,12 @@ export const linkerFlags: Flag[] = [
     desc: "macOS deployment target at link (sets LC_BUILD_VERSION minos)",
   },
   {
+    // globalFlags doesn't flow to ldflags (see comment above), so repeat here.
+    flag: "-arch x86_64",
+    when: c => c.darwin && c.x64 && c.host.arch === "aarch64",
+    desc: "macOS cross-compile: force x86_64 link on arm64 host",
+  },
+  {
     flag: "-Wl,-w",
     when: c => c.darwin && c.debug,
     desc: "Suppress all linker warnings (workaround: no selective suppress for alignment warnings as of 2025-07)",
