@@ -35,8 +35,23 @@ jobs:
       - name: Install Rust x86_64 target
         run: |
           rustup target add x86_64-apple-darwin
-          # lolhtml uses a pinned nightly toolchain via rust-toolchain.toml;
-          # add the target to every installed toolchain so cargo can find it.
+
+          # lolhtml pins a specific nightly in its rust-toolchain.toml.
+          # Cargo downloads that toolchain at build time, AFTER this step, so the
+          # loop-over-installed-toolchains approach misses it.  Fix: fetch the
+          # exact pinned channel from the lolhtml commit and pre-install it with
+          # the x86_64 target so cargo finds it ready when it runs.
+          LOLHTML_COMMIT="77127cd2b8545998756e8d64e36ee2313c4bb312"
+          LOLHTML_TOOLCHAIN=$(curl -sf \
+            "https://raw.githubusercontent.com/cloudflare/lol-html/${LOLHTML_COMMIT}/rust-toolchain.toml" \
+            | grep -E '^channel\s*=' | sed 's/.*= *"\(.*\)"/\1/')
+          if [ -n "$LOLHTML_TOOLCHAIN" ]; then
+            echo "lolhtml pins toolchain: $LOLHTML_TOOLCHAIN"
+            rustup toolchain install "$LOLHTML_TOOLCHAIN" \
+              --target x86_64-apple-darwin --no-self-update
+          fi
+
+          # Also cover any other already-installed toolchains for good measure.
           for toolchain in $(rustup toolchain list | awk '{print $1}'); do
             rustup target add x86_64-apple-darwin --toolchain "$toolchain" || true
           done
