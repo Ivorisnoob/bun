@@ -45,6 +45,12 @@ export const lolhtml: Dependency = {
       spec.rustTarget = "aarch64-pc-windows-msvc";
     }
 
+    // darwin x64 on arm64 host: cargo defaults to native (aarch64-apple-darwin).
+    // Force x86_64 so the library matches the rest of the x86_64 binary.
+    if (cfg.darwin && cfg.x64 && cfg.host.arch === "aarch64") {
+      spec.rustTarget = "x86_64-apple-darwin";
+    }
+
     return spec;
   },
 
