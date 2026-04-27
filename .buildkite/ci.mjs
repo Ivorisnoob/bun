@@ -616,9 +616,7 @@ function needsBaselineVerification(platform) {
   const { os, arch, baseline } = platform;
   if (os === "linux") return (arch === "x64" && baseline) || arch === "aarch64";
   if (os === "windows") return arch === "x64" && baseline;
-  // darwin: macOS agents lack QEMU/SDE for emulator-based verification.
-  // The static instruction scanner would work but needs cargo on the agent.
-  // TODO: enable once macOS agent tooling supports it.
+  if (os === "darwin") return arch === "x64" && baseline;
   return false;
 }
 
