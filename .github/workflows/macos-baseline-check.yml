@@ -1,0 +1,97 @@
+name: macOS x64 Baseline Check
+
+# Builds a *real* darwin-x64-baseline (Bun's Rust + C/C++ at -march=nehalem /
+# -Ctarget-cpu=nehalem, reusing the regular macOS WebKit prebuilt — there is no
+# macOS baseline WebKit artifact) and runs the static AVX scanner on it.
+#
+# Purpose: determine whether the shipped macOS WebKit + Bun's own code contain
+# any *ungated* AVX/AVX2 in always-on (non-CPUID-dispatched) code paths. If the
+# scan reports only runtime-dispatched symbol families (simdutf haswell/icelake,
+# Highway N_AVX*, ipint_simd, BoringSSL aesni, ...) the in-repo baseline approach
+# is safe; anything else is a real SIGILL risk on pre-AVX2 Intel Macs.
+#
+# Runs on macos-13 (the last Intel GitHub-hosted runner) so the build is native
+# x86_64 — no cross SDK setup.
+
+on:
+  # Auto-run on this investigation branch (workflow_dispatch's "Run" button only
+  # appears for workflows on the default branch, so a scoped push trigger is the
+  # reliable way to kick it off from a feature branch).
+  push:
+    branches:
+      - fix-baseline-mac
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Build profile"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - debug
+
+jobs:
+  build-and-scan:
+    name: Build & AVX-scan darwin-x64-baseline
+    runs-on: macos-13 # Intel x86_64 — native baseline build
+    timeout-minutes: 180
+    env:
+      # push events carry no inputs; default to release.
+      PROFILE: ${{ github.event.inputs.profile || 'release' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install build dependencies
+        run: |
+          brew install automake ccache cmake coreutils gnu-sed icu4c libtool ninja pkg-config llvm@21
+          echo "$(brew --prefix)/opt/llvm@21/bin" >> "$GITHUB_PATH"
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          bun-version: latest
+
+      # rust-toolchain.toml pins the nightly; rustup auto-installs it on first use.
+      - name: Show Rust toolchain
+        run: |
+          rustup show
+          cargo --version
+
+      - name: Build darwin-x64-baseline
+        run: bun run build --baseline=on --profile="$PROFILE"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Smoke test — binary loads and runs
+        run: ./build/"$PROFILE"/bun --revision
+
+      - name: Build static AVX scanner
+        run: cargo build --release --manifest-path scripts/verify-baseline-static/Cargo.toml
+
+      # No --allowlist: emit the FULL list of post-baseline symbols so we can
+      # triage which families are runtime-dispatched (fine) vs ungated (a bug).
+      # `|| true` so the job doesn't fail on expected runtime-dispatched hits;
+      # the report is the deliverable, read it from the uploaded artifact.
+      - name: Scan baseline binary for AVX (full report)
+        run: |
+          dir="build/$PROFILE"
+          bin="$dir/bun-profile"
+          [ -f "$bin" ] || bin="$dir/bun"
+          echo "Scanning: $bin"
+          ./scripts/verify-baseline-static/target/release/verify-baseline-static \
+            --binary "$bin" \
+            | tee avx-scan-report.txt || true
+
+      - name: Upload binary + scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-x64-baseline-${{ env.PROFILE }}
+          path: |
+            build/${{ env.PROFILE }}/bun*
+            avx-scan-report.txt
+          if-no-files-found: warn

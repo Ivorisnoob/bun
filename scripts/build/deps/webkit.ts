@@ -63,10 +63,14 @@ function prebuiltSuffix(cfg: Config): string {
   if (cfg.linux && cfg.abi === "musl") s += "-musl";
   if (cfg.linux && cfg.abi === "android") s += "-android";
   // Baseline WebKit artifacts (-march=nehalem, /arch:SSE2 ICU) exist for
-  // Linux amd64 (glibc + musl) and Windows amd64. No baseline variant for
-  // arm64 or macOS. Suffix order matches the release asset names:
-  // bun-webkit-linux-amd64-musl-baseline-lto.tar.gz
-  if (cfg.baseline && cfg.x64) s += "-baseline";
+  // Linux amd64 (glibc + musl) and Windows amd64. No baseline variant is
+  // published for arm64 or macOS: Apple's toolchain targets generic x86_64
+  // (no AVX) by default and WebKit's SIMD (simdutf etc.) is runtime-
+  // dispatched behind CPUID, so a darwin baseline build reuses the regular
+  // macOS WebKit. The static AVX scanner (scripts/verify-baseline-static)
+  // verifies nothing ungated slipped in. Suffix order matches the release
+  // asset names: bun-webkit-linux-amd64-musl-baseline-lto.tar.gz
+  if (cfg.baseline && cfg.x64 && !cfg.darwin) s += "-baseline";
   if (cfg.debug) s += "-debug";
   else if (cfg.lto) s += "-lto";
   if (cfg.asan) s += "-asan";
