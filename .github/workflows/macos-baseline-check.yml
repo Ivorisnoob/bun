@@ -1,17 +1,22 @@
 name: macOS x64 Baseline Check
 
-# Builds a *real* darwin-x64-baseline (Bun's Rust + C/C++ at -march=nehalem /
-# -Ctarget-cpu=nehalem, reusing the regular macOS WebKit prebuilt — there is no
-# macOS baseline WebKit artifact) and runs the static AVX scanner on it.
+# Cross-compiles a *real* darwin-x64-baseline from Linux (Bun's Rust at
+# -Ctarget-cpu=nehalem + C/C++ at -march=nehalem, reusing the regular macOS
+# WebKit prebuilt — there is no macOS baseline WebKit artifact) and runs the
+# static AVX scanner on the resulting Mach-O.
+#
+# Why ubuntu-latest and not a Mac runner: this repo already cross-compiles all
+# its macOS release artifacts from Linux (clang --target + the Apple SDK that
+# xmac.mjs auto-downloads from Apple's CDN + ld64.lld — see macos-sdk.ts). No
+# osxcross/cctools needed, only the SDK. GitHub's Intel `macos-13` runners are
+# deprecated and queue for hours; Linux runners are instant and the scanner
+# reads the Mach-O fine on any host.
 #
 # Purpose: determine whether the shipped macOS WebKit + Bun's own code contain
 # any *ungated* AVX/AVX2 in always-on (non-CPUID-dispatched) code paths. If the
 # scan reports only runtime-dispatched symbol families (simdutf haswell/icelake,
 # Highway N_AVX*, ipint_simd, BoringSSL aesni, ...) the in-repo baseline approach
 # is safe; anything else is a real SIGILL risk on pre-AVX2 Intel Macs.
-#
-# Runs on macos-13 (the last Intel GitHub-hosted runner) so the build is native
-# x86_64 — no cross SDK setup.
 
 on:
   # Auto-run on this investigation branch (workflow_dispatch's "Run" button only
@@ -33,9 +38,9 @@ on:
 
 jobs:
   build-and-scan:
-    name: Build & AVX-scan darwin-x64-baseline
-    runs-on: macos-13 # Intel x86_64 — native baseline build
-    timeout-minutes: 180
+    name: Cross-build & AVX-scan darwin-x64-baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     env:
       # push events carry no inputs; default to release.
       PROFILE: ${{ github.event.inputs.profile || 'release' }}
@@ -45,29 +50,53 @@ jobs:
         with:
           submodules: false
 
-      - name: Install build dependencies
+      # apt.llvm.org gives us clang-21 + the full toolchain (ld64.lld for the
+      # Mach-O link, llvm-strip which GNU strip can't replace for Mach-O,
+      # dsymutil for the release dSYM). Putting llvm-21/bin first on PATH
+      # exposes them all unsuffixed at exactly the version the build wants.
+      - name: Install LLVM 21 toolchain
         run: |
-          brew install automake ccache cmake coreutils gnu-sed icu4c libtool ninja pkg-config llvm@21
-          echo "$(brew --prefix)/opt/llvm@21/bin" >> "$GITHUB_PATH"
+          wget -qO /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 21
+          sudo apt-get install -y --no-install-recommends llvm-21 lld-21 clang-21
+          echo "/usr/lib/llvm-21/bin" >> "$GITHUB_PATH"
+
+      - name: Show C/link toolchain
+        run: |
+          clang --version
+          ld64.lld --version || true
+          llvm-strip --version
+          dsymutil --version || true
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
         with:
           bun-version: latest
 
-      # rust-toolchain.toml pins the nightly; rustup auto-installs it on first use.
-      - name: Show Rust toolchain
+      # rust-toolchain.toml pins the nightly; rustup auto-installs it. The
+      # darwin std is a prebuilt Tier-2 target — add it for the pinned toolchain
+      # (the ninja cross rule self-heals this too, but be explicit).
+      - name: Rust toolchain + darwin target
         run: |
           rustup show
+          rustup target add x86_64-apple-darwin
           cargo --version
 
-      - name: Build darwin-x64-baseline
-        run: bun run build --baseline=on --profile="$PROFILE"
+      # --lto=off: the shipped artifact uses LTO, but ISA targeting
+      # (-Ctarget-cpu=nehalem / -march=nehalem) is enforced per translation unit
+      # regardless of LTO, so the AVX-safety conclusion is identical with far
+      # fewer moving parts (no cross-language LTO fix-up). The eventual real
+      # release lane in ci.mjs keeps LTO on.
+      - name: Cross-build darwin-x64-baseline
+        run: bun run build --os=darwin --arch=x64 --baseline=on --lto=off --profile="$PROFILE"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Smoke test — binary loads and runs
-        run: ./build/"$PROFILE"/bun --revision
+      - name: Inspect build output
+        run: |
+          ls -la "build/$PROFILE" || true
+          file "build/$PROFILE"/bun* || true
 
       - name: Build static AVX scanner
         run: cargo build --release --manifest-path scripts/verify-baseline-static/Cargo.toml
@@ -82,6 +111,7 @@ jobs:
           bin="$dir/bun-profile"
           [ -f "$bin" ] || bin="$dir/bun"
           echo "Scanning: $bin"
+          file "$bin"
           ./scripts/verify-baseline-static/target/release/verify-baseline-static \
             --binary "$bin" \
             | tee avx-scan-report.txt || true
