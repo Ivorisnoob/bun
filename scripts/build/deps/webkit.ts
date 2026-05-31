@@ -63,14 +63,17 @@ function prebuiltSuffix(cfg: Config): string {
   if (cfg.linux && cfg.abi === "musl") s += "-musl";
   if (cfg.linux && cfg.abi === "android") s += "-android";
   // Baseline WebKit artifacts (-march=nehalem, /arch:SSE2 ICU) exist for
-  // Linux amd64 (glibc + musl) and Windows amd64. No baseline variant is
-  // published for arm64 or macOS: Apple's toolchain targets generic x86_64
-  // (no AVX) by default and WebKit's SIMD (simdutf etc.) is runtime-
-  // dispatched behind CPUID, so a darwin baseline build reuses the regular
-  // macOS WebKit. The static AVX scanner (scripts/verify-baseline-static)
-  // verifies nothing ungated slipped in. Suffix order matches the release
+  // Linux amd64 (glibc + musl) and Windows amd64. There is NO macOS baseline
+  // WebKit yet: the regular macos-amd64 prebuilt is compiled haswell-class
+  // (verified — pervasive ungated AVX in always-on JSC code: the JIT, WASM
+  // parser, GC, and B3/Air register allocator, e.g. AbstractHeapRepository /
+  // BytecodeIntrinsicRegistry ctors), so reusing it for a baseline build
+  // would SIGILL at VM startup on a pre-AVX2 Mac. A darwin-x64-baseline build
+  // therefore requests bun-webkit-macos-amd64-baseline, which 404s until that
+  // target is added to oven-sh/WebKit's release CI — and no darwin baseline
+  // lane is wired into ci.mjs until then. Suffix order matches the release
   // asset names: bun-webkit-linux-amd64-musl-baseline-lto.tar.gz
-  if (cfg.baseline && cfg.x64 && !cfg.darwin) s += "-baseline";
+  if (cfg.baseline && cfg.x64) s += "-baseline";
   if (cfg.debug) s += "-debug";
   else if (cfg.lto) s += "-lto";
   if (cfg.asan) s += "-asan";
